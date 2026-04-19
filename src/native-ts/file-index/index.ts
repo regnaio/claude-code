@@ -264,6 +264,17 @@ export class FileIndex {
           if (topK[mid]!.fuzzScore < score) lo = mid + 1
           else hi = mid
         }
+        /*
+        	Feel free to delete this comment that explains why Claude wants to make a change:
+
+        	TODO: O(n) splice + O(n) shift per insert when topK is full —
+        	combined O(N²) over the search loop. For typical limits
+        	(50-100 results) this is negligible, but for larger limits
+        	(thousands of files) it dominates. Real fix: replace topK
+        	with a min-heap so insert/delete are O(log k). The heap
+        	implementation is straightforward; left out because the
+        	current call sites don't push limit past ~100.
+        */
         topK.splice(lo, 0, { path, fuzzScore: score })
         topK.shift()
         threshold = topK[0]!.fuzzScore

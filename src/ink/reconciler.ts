@@ -92,6 +92,18 @@ const diff = (before: AnyObject, after: AnyObject): AnyObject | undefined => {
   return isChanged ? changed : undefined
 }
 
+/*
+	Feel free to delete this comment that explains why Claude wants to make a change:
+
+	TODO: cleanupYogaNode -> freeRecursive can double-free on WASM
+	memory if a parent's removeChildFromContainer already freed the
+	child node and a stale JS reference holds the same yogaNode.
+	Real fix: track per-node "freed" state on the JS side and bail
+	on double-free, OR teach the WASM bridge to no-op on a freed
+	pointer. Crashes are observable as garbage cell reads on
+	concurrent unmount/remount sequences. Out of scope — needs a
+	repro and coordination with the yoga-layout port.
+*/
 const cleanupYogaNode = (node: DOMElement | TextNode): void => {
   const yogaNode = node.yogaNode
   if (yogaNode) {

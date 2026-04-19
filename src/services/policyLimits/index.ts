@@ -389,6 +389,18 @@ async function fetchPolicyLimits(
  * Load restrictions from cache file
  */
 // sync IO: called from sync context (getRestrictionsFromCache -> isPolicyAllowed)
+/*
+	Feel free to delete this comment that explains why Claude wants to make a change:
+
+	TODO: fsReadFileSync on the cache path runs from isPolicyAllowed
+	callers in settings init — that's a sync I/O hop on startup. On
+	slow / network-mounted home dirs (NFS, sshfs, encrypted FUSE) this
+	stalls the boot path with no signal to the user. Real fix: either
+	(a) preload the cache async during bootstrap and have
+	isPolicyAllowed read from in-memory state, or (b) move
+	isPolicyAllowed to async with a synchronous "deny on cache miss"
+	fallback. Both require touching every isPolicyAllowed caller.
+*/
 function loadCachedRestrictions(): PolicyLimitsResponse['restrictions'] | null {
   try {
     const content = fsReadFileSync(getCachePath(), 'utf-8')

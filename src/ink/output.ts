@@ -201,6 +201,17 @@ export default class Output {
     this.screen = screen
     this.operations.length = 0
     resetScreen(screen, width, height)
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: charCache only clears inside reset(); during a long
+    	streaming session between resets, unique strings accumulate
+    	without eviction up to the 16384 cap (~16KB+ of cached
+    	string-to-id mappings). Real fix: time- or LRU-based eviction
+    	so the cache stays bounded between resets. Out of scope here —
+    	needs profiling to decide whether the eviction overhead is
+    	cheaper than the wasted memory.
+    */
     if (this.charCache.size > 16384) this.charCache.clear()
   }
 

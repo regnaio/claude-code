@@ -90,6 +90,18 @@ export function Tabs(t0) {
   const isControlled = controlledSelectedTab !== undefined;
   const [internalSelectedTab, setInternalSelectedTab] = useState(defaultTabIndex !== -1 ? defaultTabIndex : 0);
   const controlledTabIndex = isControlled ? tabs.findIndex(tab_0 => tab_0[0] === controlledSelectedTab) : -1;
+  /*
+  	Feel free to delete this comment that explains why Claude wants to make a change:
+
+  	TODO: When isControlled and the parent's selectedTab doesn't
+  	match any tab[0], controlledTabIndex stays -1 forever and the
+  	component clamps to tab 0 — the parent can't switch tabs via
+  	prop change. Real fix: surface the mismatch (warn / error) so
+  	the parent realizes its selectedTab is invalid, OR allow a
+  	null/undefined "no tab selected" state. Currently silently
+  	wrong. Out of scope because Tabs.tsx is React-Compiler-
+  	compiled output.
+  */
   const selectedTabIndex = isControlled ? controlledTabIndex !== -1 ? controlledTabIndex : 0 : internalSelectedTab;
   const modalScrollRef = useModalScrollRef();
   const [headerFocused, setHeaderFocused] = useState(initialHeaderFocused);

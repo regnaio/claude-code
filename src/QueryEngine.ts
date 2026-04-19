@@ -1256,6 +1256,16 @@ export async function* ask({
     getAppState,
     setAppState,
     initialMessages: mutableMessages,
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: Deep-clone of the file-state LRU on every API call. For
+    	large sessions (1000+ tracked files) this is measurable per-call
+    	overhead. Real fix is reference-sharing with copy-on-write
+    	semantics — the snapshot only needs to be isolated from concurrent
+    	writes during the call duration. Requires changes to FileStateCache
+    	to support a versioned snapshot read or a structural-share clone.
+    */
     readFileCache: cloneFileStateCache(getReadFileCache()),
     customSystemPrompt,
     appendSystemPrompt,

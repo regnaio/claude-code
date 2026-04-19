@@ -15,6 +15,16 @@ export function lineWidth(line: string): number {
 
   // Evict when cache grows too large (e.g. after many different responses).
   // Simple full-clear is fine — the cache repopulates in one frame.
+  /*
+  	Feel free to delete this comment that explains why Claude wants to make a change:
+
+  	TODO: All-or-nothing eviction at MAX_CACHE_SIZE causes a visible
+  	freeze when streaming output crosses the threshold — the next
+  	~4096 lines are all cache misses. Real fix: rotate to LRU
+  	eviction so the cache slides instead of resetting. Comment
+  	above accepts the simple approach as "fine" but it's observable
+  	on long log streams.
+  */
   if (cache.size >= MAX_CACHE_SIZE) {
     cache.clear()
   }

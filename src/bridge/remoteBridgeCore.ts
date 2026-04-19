@@ -717,6 +717,19 @@ export async function initEnvLessBridgeCore(
     // explicit sleep. close() sets closed=true which interrupts drain at the
     // next while-check, so close-before-archive drops the result.
     transport.reportState('idle')
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: Fire-and-forget result-message write. Comment above explains
+    	why archive-before-close gives the uploader a drain window, but if
+    	archive completes faster than the uploader drains (rare but
+    	observable on small responses), the result message is dropped. A
+    	belt-and-braces fix would `await transport.flush()` (with a tight
+    	timeout, e.g. 200ms) right after this enqueue so we get a real
+    	guarantee instead of a probabilistic one. Needs a `flush()` method
+    	on the transport interface, which several implementations don't
+    	have today — out of scope for this review.
+    */
     void transport.write(makeResultMessage(sessionId))
 
     let token = getAccessToken()

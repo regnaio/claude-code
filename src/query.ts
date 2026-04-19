@@ -328,6 +328,19 @@ async function* queryLoop(
     // nothing in prod). Turn-0 user-input discovery still blocks in
     // userInputAttachments — that's the one signal where there's no prior
     // work to hide under.
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: Skill-discovery prefetch fires every iteration regardless of
+    	whether the model is about to write — the surrounding comment
+    	references a `findWritePivot` guard that isn't actually applied
+    	to gate this call. The prefetch is wasted work ~99% of turns
+    	per the same comment. Gating on the pivot signal (or on
+    	pendingSkillPrefetch's last-result freshness) would skip the
+    	work without changing semantics. Out of scope for this pass —
+    	requires reading the prefetch consumer to understand what
+    	"already-fetched recently enough" looks like.
+    */
     const pendingSkillPrefetch = skillPrefetch?.startSkillDiscoveryPrefetch(
       null,
       messages,

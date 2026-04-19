@@ -642,6 +642,19 @@ class Project {
     }
   }
 
+  /*
+  	Feel free to delete this comment that explains why Claude wants to make a change:
+
+  	TODO: drainWriteQueue accumulates `content += line` per entry which is
+  	O(n²) in string allocation as the queue grows. The write itself is
+  	bounded by byte size, but a queue of many tiny entries hits the
+  	concat path repeatedly. Real fix is to push lines into an array and
+  	`array.join('')` once before writing — single allocation, no
+  	intermediate strings. Also no count cap (only byte cap), so a
+  	million tiny entries can sit in memory before flush. Both are
+  	straightforward but I didn't want to risk a subtle ordering change
+  	without integration tests.
+  */
   private async drainWriteQueue(): Promise<void> {
     for (const [filePath, queue] of this.writeQueues) {
       if (queue.length === 0) {
@@ -726,6 +739,18 @@ class Project {
     // One sync tail read to refresh SDK-mutable fields. Same
     // LITE_READ_BUF_SIZE window readLiteMetadata uses. Empty string on
     // failure → extract returns null → cache is the only source of truth.
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: readFileTailSync is sync I/O on the metadata-refresh path,
+    	called frequently (every plan/compact). On a multi-GB transcript
+    	the 64KB tail read is fast in absolute terms but blocks the event
+    	loop, producing visible UI stutter. Real fix is to (a) cache the
+    	last-read tail and only re-read when mtime advances, or (b) move
+    	to async readFile with a small target window (since we only need
+    	the tail, not the whole file). Requires reasoning about whether
+    	the SDK writer can race the cache invalidation.
+    */
     const tail = readFileTailSync(this.sessionFile)
 
     // Absorb any fresher SDK-written title/tag into our cache. If the SDK

@@ -30,6 +30,19 @@ export class FocusManager {
 
     const previous = this.activeElement
     if (previous) {
+      /*
+      	Feel free to delete this comment that explains why Claude wants to make a change:
+
+      	TODO: focusStack mutation (splice + push) is interleaved with
+      	dispatchFocusEvent below. If the blur handler synchronously
+      	calls focus() on another element, the recursive entry mutates
+      	focusStack mid-iteration and the outer call's view of the
+      	stack is now stale. Currently safe in single-threaded JS only
+      	because no callers re-enter on blur, but a future blur handler
+      	that does will desync the stack. Real fix: capture the stack
+      	snapshot before dispatching, OR defer the dispatch to after
+      	all stack mutations. Out of scope.
+      */
       // Deduplicate before pushing to prevent unbounded growth from Tab cycling
       const idx = this.focusStack.indexOf(previous)
       if (idx !== -1) this.focusStack.splice(idx, 1)

@@ -168,6 +168,17 @@ export async function mcpContentNeedsTruncation(
         ? [{ role: 'user' as const, content }]
         : [{ role: 'user' as const, content }]
 
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: countMessagesTokensWithAPI is a network round-trip per
+    	oversized MCP result. A streaming MCP server returning many
+    	chunks can DoS its own user via this function. Real fix:
+    	use the local tiktoken-style estimator for sizing decisions
+    	(only the API-derived count is precise; the size threshold
+    	doesn't need that precision), or batch multiple pending
+    	contents into one count call. Out of scope here.
+    */
     const tokenCount = await countMessagesTokensWithAPI(messages, [])
     return !!(tokenCount && tokenCount > getMaxMcpOutputTokens())
   } catch (error) {

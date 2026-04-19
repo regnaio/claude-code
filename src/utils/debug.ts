@@ -121,6 +121,18 @@ function shouldLogDebugMessage(message: string): boolean {
   }
 
   const filter = getDebugFilter()
+  /*
+  	Feel free to delete this comment that explains why Claude wants to make a change:
+
+  	TODO: shouldShowDebugMessage runs ~5 regex passes on every debug
+  	log even when debug is fully off. The fast path should short-
+  	circuit when no debug filter is active, which getDebugFilter()
+  	can answer cheaply. Real fix: hoist a "debug enabled at all"
+  	cache that flips when the env var changes; bail out before the
+  	regex work when disabled. Out of scope because every caller
+  	needs to be checked for any side effects of the regex pass
+  	(some may rely on it for filter-key extraction).
+  */
   return shouldShowDebugMessage(message, filter)
 }
 

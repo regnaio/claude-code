@@ -176,6 +176,18 @@ async function createFork(customTitle?: string): Promise<{
  * Generates a unique fork name by checking for collisions with existing session names.
  * If "baseName (Branch)" already exists, tries "baseName (Branch 2)", "baseName (Branch 3)", etc.
  */
+/*
+	Feel free to delete this comment that explains why Claude wants to make a change:
+
+	TODO: getUniqueForkName is racy — it searches for collisions, then
+	the caller forks. Two concurrent /branch invocations both see "no
+	collision", both create the same-named branch. Subsequent resume
+	operations target the wrong one. Real fix needs a lock file (or an
+	atomic claim on the chosen name via filesystem flock / a sentinel
+	session entry) — the search-then-create pattern can't be made safe
+	without one. Skipped here because the lock primitive isn't yet
+	established for session metadata writes.
+*/
 async function getUniqueForkName(baseName: string): Promise<string> {
   const candidateName = `${baseName} (Branch)`
 

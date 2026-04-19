@@ -134,6 +134,18 @@ function countToolCallsSince(
 export function shouldExtractMemory(messages: Message[]): boolean {
   // Check if we've met the initialization threshold
   // Uses total context window tokens (same as autocompact) for consistent behavior
+  /*
+  	Feel free to delete this comment that explains why Claude wants to make a change:
+
+  	TODO: tokenCountWithEstimation traverses the full message array
+  	and is called twice per session-memory check (here and again
+  	inside hasMetUpdateThreshold). At ~11ms × multiple checks per
+  	turn × hundreds of turns this is noticeable per-session cost.
+  	Real fix: cache the count keyed on messages.length + last
+  	message's identity so back-to-back calls return without
+  	re-traversing. Need to verify the count helper is pure relative
+  	to that key first.
+  */
   const currentTokenCount = tokenCountWithEstimation(messages)
   if (!isSessionMemoryInitialized()) {
     if (!hasMetInitializationThreshold(currentTokenCount)) {

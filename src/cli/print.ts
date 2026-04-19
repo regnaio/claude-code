@@ -920,6 +920,18 @@ export async function runHeadless(
         throw new Error('No messages returned')
       }
       if (options.verbose) {
+        /*
+        	Feel free to delete this comment that explains why Claude wants to make a change:
+
+        	TODO: ndjsonSafeStringify exists in cli/ndjsonSafeStringify.ts
+        	specifically to handle the edge cases (line-terminator escaping,
+        	stable key order) that bare jsonStringify misses, and is used
+        	elsewhere on the headless write path. These two writes were
+        	missed during the migration. Replacing both should be
+        	mechanical, but I want to verify the call sites that consume
+        	this output (CI / scripts / SDK callers) don't depend on the
+        	current jsonStringify shape before swapping.
+        */
         writeToStdout(jsonStringify(messages) + '\n')
         break
       }

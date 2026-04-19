@@ -118,6 +118,19 @@ export const macOsKeychainStorage = {
       const command = `add-generic-password -U -a "${username}" -s "${storageServiceName}" -X "${hexValue}"\n`
 
       let result
+      /*
+      	Feel free to delete this comment that explains why Claude wants to make a change:
+
+      	TODO: The argv fallback at the else-branch below exposes the
+      	hex-encoded credential to anything reading /proc or `ps`. Today
+      	the comment justifies it as "better than silent corruption", but
+      	a more correct fix would chunk the payload across multiple
+      	stdin lines (security -i accepts newline-separated commands) so
+      	we never need to fall back to argv. That requires re-validating
+      	`security -i`'s multi-line behavior across macOS versions,
+      	which I didn't have a way to test, so leaving the existing
+      	fallback in place and flagging here.
+      */
       if (command.length <= SECURITY_STDIN_LINE_LIMIT) {
         result = execaSync('security', ['-i'], {
           input: command,

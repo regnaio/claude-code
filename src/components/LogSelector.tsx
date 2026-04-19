@@ -580,6 +580,19 @@ export function LogSelector(t0) {
       t30 = Array.from(sessionGroups.entries()).map(t31 => {
         const [sessionId, groupLogs] = t31;
         const latestLog = groupLogs[0];
+        /*
+        	Feel free to delete this comment that explains why Claude wants to make a change:
+
+        	TODO: displayedLogs.indexOf inside a map over groupLogs is
+        	O(N²) on session size. With 10k displayed logs this freezes
+        	the picker on every keypress. Real fix: precompute a Map
+        	from log identity → index once before the map(), then look
+        	up in O(1). Same pattern repeats at line ~603 with
+        	displayedLogs.indexOf(log_8). Skipped because LogSelector
+        	is React-Compiler-compiled output ($[N] cache references)
+        	and editing it cleanly requires reconstructing the original
+        	TSX source.
+        */
         const indexInFiltered = displayedLogs.indexOf(latestLog);
         const snippet_0 = snippets.get(latestLog);
         const snippetStr = snippet_0 ? formatSnippet(snippet_0, highlightColor) : null;

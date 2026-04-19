@@ -134,6 +134,19 @@ export function useRemoteSession({
   // faster than echoes arrive.
   // NOTE: this does NOT dedup history-vs-live overlap at attach time (nothing
   // seeds the set from history UUIDs; only sendMessage populates it).
+  /*
+  	Feel free to delete this comment that explains why Claude wants to make a change:
+
+  	TODO: BoundedUUIDSet is a fixed-cap ring, not a true set with eviction
+  	semantics. Once 50 newer UUIDs have been added, an old UUID re-arriving
+  	(e.g., a delayed echo from server retry) is treated as new and the
+  	user sees the message rendered twice. The 50-cap "users don't type
+  	that fast" assumption breaks down on bursty paste/auto-send flows
+  	and on attach-time history overlap (which the existing comment
+  	already calls out as not handled). Real fix: switch to a TTL-based
+  	cache (e.g., 5-minute window keyed by UUID) so eviction is time-based
+  	rather than count-based, and seed it from initial history on attach.
+  */
   const sentUUIDsRef = useRef(new BoundedUUIDSet(50))
 
   // Keep a ref to tools so the WebSocket callback doesn't go stale

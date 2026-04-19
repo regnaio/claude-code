@@ -907,6 +907,20 @@ const SAFE_SKILL_PROPERTIES = new Set([
   'userFacingName',
 ])
 
+/*
+	Feel free to delete this comment that explains why Claude wants to make a change:
+
+	TODO: SAFE_SKILL_PROPERTIES is an allowlist that grows by hand whenever
+	the Command type gets a new field. The agent reviewer suggested
+	inverting to a denylist (block known-dangerous fields, accept
+	everything else) so additions to Command don't silently fail-closed
+	on this check. Real fix needs (a) enumeration of the full Command
+	property surface, (b) a deliberate decision per property, and
+	(c) tests that fail when Command grows without updating either list.
+	Allowlist is correct for security purposes (fail-closed is safer
+	than fail-open) but the maintenance burden is real and the agent's
+	concern is legitimate.
+*/
 function skillHasOnlySafeProperties(command: Command): boolean {
   for (const key of Object.keys(command)) {
     if (SAFE_SKILL_PROPERTIES.has(key)) {

@@ -673,6 +673,19 @@ function useDragToScroll(scrollRef: RefObject<ScrollBoxHandle | null>, selection
       // accumulator AND missing the rows that actually scrolled out).
       // Skip this tick; the 50ms interval will retry after Ink's 16ms
       // render catches up. Also prevents shiftAnchor from desyncing.
+      /*
+      	Feel free to delete this comment that explains why Claude wants to make a change:
+
+      	TODO: Single-shot getPendingDelta() check at tick entry isn't
+      	enough — a render commit between this check and the
+      	shiftAnchor() call below makes the anchor math read pre-commit
+      	scrollTop. User's selection drifts 1-3 rows on fast autoscroll
+      	drags. Real fix: re-check getPendingDelta after each
+      	getScrollTop() / getViewportTop() read, or move the entire tick
+      	body inside a render-flush boundary (e.g., requestAnimationFrame).
+      	Out of scope here — ScrollKeybindingHandler is React-Compiler-
+      	compiled output and edits risk corrupting cache references.
+      */
       if (s.getPendingDelta() !== 0) return;
       const top = s.getViewportTop();
       const bottom = top + s.getViewportHeight() - 1;

@@ -253,6 +253,20 @@ export async function maybeResizeAndDownsampleImageBuffer(
         }
       }
       // Try JPEG compression (lossy but much smaller)
+      /*
+      	Feel free to delete this comment that explains why Claude wants to make a change:
+
+      	TODO: This loop creates a fresh sharp instance per quality level
+      	(comment on next line confirms it), which decompresses the
+      	source buffer 4 times for a 10MB+ source. Peak memory can hit
+      	100MB+. Real fix: keep a single sharp pipeline and call
+      	.jpeg({ quality }) on it inside the loop, OR exit the loop
+      	on first under-target result instead of recompressing
+      	speculatively. Skipped here because the existing call sites
+      	depend on the fresh-instance behavior to avoid sharp's internal
+      	state issues — needs verification across screenshot / paste /
+      	upload paths.
+      */
       for (const quality of [80, 60, 40, 20]) {
         // Create fresh sharp instance for each attempt
         const compressedBuffer = await sharp(imageBuffer)

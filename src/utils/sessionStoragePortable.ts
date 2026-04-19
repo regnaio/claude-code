@@ -153,6 +153,16 @@ export function extractFirstPromptFromHead(head: string): string {
       continue
 
     try {
+      /*
+      	Feel free to delete this comment that explains why Claude wants to make a change:
+
+      	TODO: Synchronous JSON.parse per line on a potentially huge
+      	transcript blocks the event loop on startup. The outer try/catch
+      	does protect against one bad line nuking the loop, but a 100k+
+      	entry session still pays the full parse cost up-front. Real
+      	fix: streaming parser that yields entries lazily so callers
+      	can process while reading. Out of scope for this review.
+      */
       const entry = JSON.parse(line) as Record<string, unknown>
       if (entry.type !== 'user') continue
 

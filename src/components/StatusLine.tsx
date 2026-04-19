@@ -227,6 +227,20 @@ function StatusLineInner({
     if (debounceTimerRef.current !== undefined) {
       clearTimeout(debounceTimerRef.current);
     }
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: setTimeout callback's `doUpdate` parameter is supplied via
+    	the second arg of setTimeout (Node-specific extension), but the
+    	closure also captures the outer `doUpdate` via the useCallback
+    	deps. If `doUpdate` reference changes between scheduling and
+    	firing, the timer fires with the old reference — which holds
+    	stale `messagesRef` / `setAppState` closures. Real fix: use a
+    	ref to hold the latest doUpdate and dereference inside the
+    	timer callback. Out of scope here because StatusLine.tsx is
+    	React-Compiler-compiled output and edits risk corrupting the
+    	$[N] cache machinery.
+    */
     debounceTimerRef.current = setTimeout((ref, doUpdate) => {
       ref.current = undefined;
       void doUpdate();

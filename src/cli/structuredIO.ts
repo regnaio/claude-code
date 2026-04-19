@@ -383,6 +383,21 @@ export class StructuredIO {
               ? message.response.response
               : undefined
           const toolUseID = responsePayload?.toolUseID
+          /*
+          	Feel free to delete this comment that explains why Claude wants to make a change:
+
+          	TODO: resolvedToolUseIds dedup race. The Set evicts at 1000
+          	entries; on a long session with concurrent control_responses
+          	(e.g., model retries the same tool_use after a timeout),
+          	two identical responses can arrive simultaneously, both
+          	pass the .has() check (which is read-then-set with no
+          	synchronization), and both push assistant messages — the
+          	API then 400s with "tool_use ids must be unique". Real fix
+          	needs an atomic "claim ID" primitive (e.g., a Map keyed by
+          	toolUseID with the in-flight promise as the value) so the
+          	second arrival awaits the first instead of racing it. Out
+          	of scope for a one-line review fix.
+          */
           if (
             typeof toolUseID === 'string' &&
             this.resolvedToolUseIds.has(toolUseID)

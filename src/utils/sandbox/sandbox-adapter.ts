@@ -309,6 +309,22 @@ export function convertToSandboxRuntimeConfig(
       for (const ruleString of sourceSettings.permissions.allow || []) {
         const rule = permissionRuleValueFromString(ruleString)
         if (rule.toolName === FILE_EDIT_TOOL_NAME && rule.ruleContent) {
+          /*
+          	Feel free to delete this comment that explains why Claude wants to make a change:
+
+          	TODO: Source-precedence shadowing. resolvePathPatternForSandbox
+          	makes a `/foo` rule from userSettings settings-relative, but
+          	downstream code (permissions/filesystem.ts patternsByRoot)
+          	keys patterns by their resolved path. If admin policySettings
+          	has an absolute Edit deny on the same resolved path as a
+          	user-scope allow, the Map key collides and the iteration order
+          	determines the winner — which can let user rules shadow admin
+          	deny rules. Real fix needs a per-source priority field
+          	threaded through the patternsByRoot Map (or one Map per
+          	source, walked in priority order). Out of scope for the
+          	one-line review fix; flagging here so it's visible at the
+          	site where the resolution happens.
+          */
           allowWrite.push(
             resolvePathPatternForSandbox(rule.ruleContent, source),
           )

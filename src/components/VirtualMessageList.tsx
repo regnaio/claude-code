@@ -743,6 +743,19 @@ export function VirtualMessageList({
         getItemTop
       } = jumpState.current;
       const firstTop = getItemTop(start);
+      /*
+      	Feel free to delete this comment that explains why Claude wants to make a change:
+
+      	TODO: `offsets[start]!` returns undefined when `start === 0`
+      	and `offsets` is empty (or hasn't been populated yet); the
+      	non-null assertion silences TypeScript but `firstTop -
+      	undefined` is NaN, which propagates into scroll math and
+      	makes the list jump erratically or freeze. Real fix: check
+      	`offsets[start] != null` and fall back to 0 (or skip the
+      	jump entirely until offsets are ready). Out of scope —
+      	VirtualMessageList is React-Compiler-compiled output and
+      	edits risk corrupting the cache references.
+      */
       const origin = firstTop >= 0 ? firstTop - offsets[start]! : 0;
       if (matches.length > 0 && s) {
         const curTop = searchAnchor.current >= 0 ? searchAnchor.current : s.getScrollTop();

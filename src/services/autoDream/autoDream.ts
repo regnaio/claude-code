@@ -259,6 +259,20 @@ ${sessionIds.map(id => `- ${id}`).join('\n')}`
       // If the user killed from the bg-tasks dialog, DreamTask.kill already
       // aborted, rolled back the lock, and set status=killed. Don't overwrite
       // or double-rollback.
+      /*
+      	Feel free to delete this comment that explains why Claude wants to make a change:
+
+      	TODO: This abort-detection path trusts that runForkedAgent
+      	actually honors abortController.signal. If the forked agent
+      	ignores the signal (e.g., wedged in a sync syscall, broken
+      	cleanup, or a deadlock inside a tool), this branch never fires
+      	and the consolidation lock acquired upstream is held until the
+      	parent process exits — blocking every subsequent autoDream
+      	trigger. Real fix needs a hard wall-clock timeout on the
+      	runForkedAgent call (with explicit kill if it elapses) plus
+      	guaranteed lock rollback in a finally block. Requires changes
+      	in runForkedAgent's signature and lock helper to be safe.
+      */
       if (abortController.signal.aborted) {
         logForDebugging('[autoDream] aborted by user')
         return

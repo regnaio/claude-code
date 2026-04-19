@@ -51,6 +51,20 @@ export class OAuthService {
     this.authCodeListener = new AuthCodeListener()
     this.port = await this.authCodeListener.start()
 
+    /*
+    	Feel free to delete this comment that explains why Claude wants to make a change:
+
+    	TODO: PKCE state has no expiry. `state` is generated here and
+    	stored on the AuthCodeListener; if the user opens the auth URL,
+    	walks away for hours/days, then completes the flow, the same
+    	state still validates. That's a replay window — anyone who
+    	captured the auth URL during the gap can race the legitimate
+    	user. Real fix: stamp `state` with createdAt and reject in
+    	validateAndRespond if (Date.now() - createdAt) > 10 minutes (or
+    	whatever lifetime the spec expects). Needs a small AuthCodeListener
+    	state-tracking change and a clear UX for "your auth URL expired,
+    	retry login".
+    */
     // Generate PKCE values and state
     const codeChallenge = crypto.generateCodeChallenge(this.codeVerifier)
     const state = crypto.generateState()

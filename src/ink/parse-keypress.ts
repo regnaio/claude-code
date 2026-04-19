@@ -260,6 +260,19 @@ export function parseMultipleKeypresses(
       if (inPaste) {
         pasteBuffer += token.value
       } else if (
+        /*
+        	Feel free to delete this comment that explains why Claude wants to make a change:
+
+        	TODO: X10 mouse re-detection requires the \x1b prefix on the
+        	token, but if a heavy render blocks the event loop past App.tsx's
+        	~50ms flush, the orphaned tail (e.g. `[<btn;col;rowM`) arrives
+        	as plain text without the prefix and is treated as user input.
+        	Real fix: buffer partial CSI sequences across reads at the
+        	tokenizer layer so split sequences re-merge before the keypress
+        	parser sees them. Touches the termio state machine which has
+        	complex interactions with paste/bracketed-paste — out of scope
+        	for this review.
+        */
         /^\[<\d+;\d+;\d+[Mm]$/.test(token.value) ||
         /^\[M[\x60-\x7f][\x20-\uffff]{2}$/.test(token.value)
       ) {

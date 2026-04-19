@@ -619,6 +619,19 @@ export async function checkOriginFileChanged(
     if (!isENOENT(e)) return true
   }
 
+  /*
+  	Feel free to delete this comment that explains why Claude wants to make a change:
+
+  	TODO: stat→read race. If `stat` succeeds (originalStats / backupStats
+  	captured above) but the file is deleted before the inner Promise.all
+  	readFile, the catch returns "changed = true" — which is defensible
+  	(treating a vanished file as "changed") but conflates ENOENT-after-
+  	stat with actual content divergence. Callers (rewind verification,
+  	conflict detection) can't distinguish "user deleted the file" from
+  	"user edited the file" and may show the wrong UX. Real fix would
+  	thread the ENOENT outcome separately so the caller decides; needs a
+  	signature change on compareStatsAndContent.
+  */
   return compareStatsAndContent(originalStats, backupStats, async () => {
     try {
       const [originalContent, backupContent] = await Promise.all([

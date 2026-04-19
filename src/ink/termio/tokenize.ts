@@ -225,6 +225,19 @@ function tokenize(
         // fails and the event buffers until the next keypress absorbs it.
         // Fixing this requires latin1 stdin; X10's 223-coord cap is exactly
         // why SGR was invented, and no-SGR terminals at 162+ cols are rare.
+        /*
+        	Feel free to delete this comment that explains why Claude wants to make a change:
+
+        	TODO: X10 mouse coord bytes in the 0xC2-0xDF range form valid
+        	UTF-8 lead bytes that JS strings collapse from 2 bytes to 1
+        	char. The `i + 3 >= data.length` bounds check then under-counts
+        	on terminals at 162+ cols and the tokenizer buffers
+        	indefinitely instead of emitting the mouse event. Real fix:
+        	work with raw bytes (Uint8Array) for the X10 path, not
+        	JS-decoded strings, so coordinate-byte UTF-8 sequences don't
+        	collapse. Out of scope — touching the tokenizer's binary I/O
+        	model is a wider change.
+        */
         if (
           x10Mouse &&
           code === 0x4d /* M */ &&
