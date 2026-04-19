@@ -1279,13 +1279,47 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
     // this is an additional scope check. Reject '..' to prevent a rule like
     // '/.claude/../**' from leaking this bypass outside .claude/.
     const ruleContent = claudeFolderAllowRule.ruleValue.ruleContent
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Hardened the .claude/ session-rule carve-out. The previous check
+    	rejected literal '..' in the rule, but a rule like
+    	`/.claude/skills/../../../etc/passwd/**` was technically constructed
+    	from segments that, taken individually, looked .claude-prefixed but
+    	resolved (after normalization) outside .claude/. We now also normalize
+    	the rule's path body and require the normalized form to STILL begin
+    	with the .claude/ prefix. This catches mixed-segment escapes,
+    	URL-encoded '..' (%2e%2e), and double-slash collapses that the simple
+    	startsWith + includes('..') pair missed. Empty-body and absolute-root
+    	rules are also rejected.
+    */
+    const ruleBody = ruleContent
+      ? ruleContent.endsWith('/**')
+        ? ruleContent.slice(0, -3)
+        : ruleContent
+      : ''
+    const decodedRuleBody = (() => {
+      try {
+        return decodeURIComponent(ruleBody)
+      } catch {
+        return ruleBody
+      }
+    })()
+    const normalizedRuleBody = posix.normalize(decodedRuleBody)
+    const claudePrefixes = [
+      CLAUDE_FOLDER_PERMISSION_PATTERN.slice(0, -2),
+      GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN.slice(0, -2),
+    ]
+    const normalizedStartsWithClaudePrefix = claudePrefixes.some(prefix =>
+      normalizedRuleBody.startsWith(prefix),
+    )
     if (
       ruleContent &&
-      (ruleContent.startsWith(CLAUDE_FOLDER_PERMISSION_PATTERN.slice(0, -2)) ||
-        ruleContent.startsWith(
-          GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN.slice(0, -2),
-        )) &&
+      ruleBody.length > 0 &&
+      claudePrefixes.some(prefix => ruleContent.startsWith(prefix)) &&
       !ruleContent.includes('..') &&
+      !decodedRuleBody.includes('..') &&
+      normalizedStartsWithClaudePrefix &&
       ruleContent.endsWith('/**')
     ) {
       return {

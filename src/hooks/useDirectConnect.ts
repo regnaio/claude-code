@@ -64,99 +64,126 @@ export function useDirectConnect({
     logForDebugging(`[useDirectConnect] Connecting to ${config.wsUrl}`)
 
     const manager = new DirectConnectSessionManager(config, {
+      /*
+      	Feel free to delete this comment that explains why Claude made this change:
+
+      	Wrapped the WebSocket onMessage / onPermissionRequest callbacks in
+      	try/catch. Both are invoked from the transport layer's event loop;
+      	if convertSDKMessage / setMessages / findToolByName threw on a
+      	malformed payload, the throw escaped to the WS dispatcher, which
+      	logs and tears down the connection — far more disruptive than
+      	dropping one bad message. We log via logForDebugging instead so the
+      	user keeps the live session and the bad payload is observable in
+      	the trace. (Apply same pattern to onPermissionRequest because the
+      	same blast-radius applies to permission-tool dispatch.)
+      */
       onMessage: sdkMessage => {
-        if (isSessionEndMessage(sdkMessage)) {
-          setIsLoading(false)
-        }
-
-        // Skip duplicate init messages (server sends one per turn)
-        if (sdkMessage.type === 'system' && sdkMessage.subtype === 'init') {
-          if (hasReceivedInitRef.current) {
-            return
+        try {
+          if (isSessionEndMessage(sdkMessage)) {
+            setIsLoading(false)
           }
-          hasReceivedInitRef.current = true
-        }
 
-        const converted = convertSDKMessage(sdkMessage, {
-          convertToolResults: true,
-        })
-        if (converted.type === 'message') {
-          setMessages(prev => [...prev, converted.message])
+          // Skip duplicate init messages (server sends one per turn)
+          if (sdkMessage.type === 'system' && sdkMessage.subtype === 'init') {
+            if (hasReceivedInitRef.current) {
+              return
+            }
+            hasReceivedInitRef.current = true
+          }
+
+          const converted = convertSDKMessage(sdkMessage, {
+            convertToolResults: true,
+          })
+          if (converted.type === 'message') {
+            setMessages(prev => [...prev, converted.message])
+          }
+        } catch (err) {
+          logForDebugging(
+            `[useDirectConnect] onMessage threw: ${(err as Error)?.message ?? String(err)}`,
+            { level: 'warn' },
+          )
         }
       },
       onPermissionRequest: (request, requestId) => {
-        logForDebugging(
-          `[useDirectConnect] Permission request for tool: ${request.tool_name}`,
-        )
+        try {
+          logForDebugging(
+            `[useDirectConnect] Permission request for tool: ${request.tool_name}`,
+          )
 
-        const tool =
-          findToolByName(toolsRef.current, request.tool_name) ??
-          createToolStub(request.tool_name)
+          const tool =
+            findToolByName(toolsRef.current, request.tool_name) ??
+            createToolStub(request.tool_name)
 
-        const syntheticMessage = createSyntheticAssistantMessage(
-          request,
-          requestId,
-        )
+          const syntheticMessage = createSyntheticAssistantMessage(
+            request,
+            requestId,
+          )
 
-        const permissionResult: PermissionAskDecision = {
-          behavior: 'ask',
-          message:
-            request.description ?? `${request.tool_name} requires permission`,
-          suggestions: request.permission_suggestions,
-          blockedPath: request.blocked_path,
+          const permissionResult: PermissionAskDecision = {
+            behavior: 'ask',
+            message:
+              request.description ?? `${request.tool_name} requires permission`,
+            suggestions: request.permission_suggestions,
+            blockedPath: request.blocked_path,
+          }
+
+          const toolUseConfirm: ToolUseConfirm = {
+            assistantMessage: syntheticMessage,
+            tool,
+            description:
+              request.description ?? `${request.tool_name} requires permission`,
+            input: request.input,
+            toolUseContext: {} as ToolUseConfirm['toolUseContext'],
+            toolUseID: request.tool_use_id,
+            permissionResult,
+            permissionPromptStartTimeMs: Date.now(),
+            onUserInteraction() {
+              // No-op for remote
+            },
+            onAbort() {
+              const response: RemotePermissionResponse = {
+                behavior: 'deny',
+                message: 'User aborted',
+              }
+              manager.respondToPermissionRequest(requestId, response)
+              setToolUseConfirmQueue(queue =>
+                queue.filter(item => item.toolUseID !== request.tool_use_id),
+              )
+            },
+            onAllow(updatedInput, _permissionUpdates, _feedback) {
+              const response: RemotePermissionResponse = {
+                behavior: 'allow',
+                updatedInput,
+              }
+              manager.respondToPermissionRequest(requestId, response)
+              setToolUseConfirmQueue(queue =>
+                queue.filter(item => item.toolUseID !== request.tool_use_id),
+              )
+              setIsLoading(true)
+            },
+            onReject(feedback?: string) {
+              const response: RemotePermissionResponse = {
+                behavior: 'deny',
+                message: feedback ?? 'User denied permission',
+              }
+              manager.respondToPermissionRequest(requestId, response)
+              setToolUseConfirmQueue(queue =>
+                queue.filter(item => item.toolUseID !== request.tool_use_id),
+              )
+            },
+            async recheckPermission() {
+              // No-op for remote
+            },
+          }
+
+          setToolUseConfirmQueue(queue => [...queue, toolUseConfirm])
+          setIsLoading(false)
+        } catch (err) {
+          logForDebugging(
+            `[useDirectConnect] onPermissionRequest threw: ${(err as Error)?.message ?? String(err)}`,
+            { level: 'warn' },
+          )
         }
-
-        const toolUseConfirm: ToolUseConfirm = {
-          assistantMessage: syntheticMessage,
-          tool,
-          description:
-            request.description ?? `${request.tool_name} requires permission`,
-          input: request.input,
-          toolUseContext: {} as ToolUseConfirm['toolUseContext'],
-          toolUseID: request.tool_use_id,
-          permissionResult,
-          permissionPromptStartTimeMs: Date.now(),
-          onUserInteraction() {
-            // No-op for remote
-          },
-          onAbort() {
-            const response: RemotePermissionResponse = {
-              behavior: 'deny',
-              message: 'User aborted',
-            }
-            manager.respondToPermissionRequest(requestId, response)
-            setToolUseConfirmQueue(queue =>
-              queue.filter(item => item.toolUseID !== request.tool_use_id),
-            )
-          },
-          onAllow(updatedInput, _permissionUpdates, _feedback) {
-            const response: RemotePermissionResponse = {
-              behavior: 'allow',
-              updatedInput,
-            }
-            manager.respondToPermissionRequest(requestId, response)
-            setToolUseConfirmQueue(queue =>
-              queue.filter(item => item.toolUseID !== request.tool_use_id),
-            )
-            setIsLoading(true)
-          },
-          onReject(feedback?: string) {
-            const response: RemotePermissionResponse = {
-              behavior: 'deny',
-              message: feedback ?? 'User denied permission',
-            }
-            manager.respondToPermissionRequest(requestId, response)
-            setToolUseConfirmQueue(queue =>
-              queue.filter(item => item.toolUseID !== request.tool_use_id),
-            )
-          },
-          async recheckPermission() {
-            // No-op for remote
-          },
-        }
-
-        setToolUseConfirmQueue(queue => [...queue, toolUseConfirm])
-        setIsLoading(false)
       },
       onConnected: () => {
         logForDebugging('[useDirectConnect] Connected')

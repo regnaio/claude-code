@@ -333,6 +333,27 @@ function getCustomHeaders(): Record<string, string> {
 
   if (!customHeadersEnv) return customHeaders
 
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Strip auth-class headers from ANTHROPIC_CUSTOM_HEADERS so a stray
+  	`Authorization: Bearer <secret>` line in someone's environment doesn't
+  	silently override the SDK's own auth header (which sets up token
+  	rotation, revocation, etc. via the proper code path). The custom
+  	header escape hatch is intended for things like routing prefixes,
+  	debug instrumentation, or org-id pinning — not for credential
+  	injection. The denylist is conservative: anything that could be used
+  	to authenticate or to leak the original auth header is dropped, with
+  	a debug log so the user can see what was stripped.
+  */
+  const AUTH_HEADER_DENYLIST = new Set([
+    'authorization',
+    'proxy-authorization',
+    'x-api-key',
+    'cookie',
+    'set-cookie',
+  ])
+
   // Split by newlines to support multiple headers
   const headerStrings = customHeadersEnv.split(/\n|\r\n/)
 
@@ -346,6 +367,24 @@ function getCustomHeaders(): Record<string, string> {
     const name = headerString.slice(0, colonIdx).trim()
     const value = headerString.slice(colonIdx + 1).trim()
     if (name) {
+      if (AUTH_HEADER_DENYLIST.has(name.toLowerCase())) {
+        // Drop silently from the runtime headers; emit a debug-only notice
+        // so users can debug if their custom header isn't being applied.
+        // (Avoid console.warn so non-interactive runs aren't noisy.)
+        try {
+          // Lazy require to avoid a top-level dep on the debug logger here.
+          // Best-effort only.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+          const { logForDebugging } = require('src/utils/debug.js')
+          logForDebugging(
+            `[api/client] Dropped auth-class header from ANTHROPIC_CUSTOM_HEADERS: ${name}`,
+            { level: 'warn' },
+          )
+        } catch {
+          // ignore
+        }
+        continue
+      }
       customHeaders[name] = value
     }
   }

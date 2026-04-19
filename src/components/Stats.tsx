@@ -368,10 +368,22 @@ function OverviewTab({
     columns: terminalWidth
   } = useTerminalSize();
 
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Defend against undefined token counts in modelUsage. The previous
+  	reduce summed `usage.inputTokens + usage.outputTokens` directly; if
+  	the backing data ever has a partial entry (e.g., a model that
+  	streamed input tokens but errored before output, or a future
+  	usage-shape change that adds a model with optional fields), the sum
+  	becomes NaN and propagates into generateFunFactoid — which then
+  	displays "NaN books read" or similar. Defaulting missing counts to
+  	0 keeps the math sane without hiding the underlying data shape.
+  */
   // Calculate favorite model and total tokens
-  const modelEntries = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens));
+  const modelEntries = Object.entries(stats.modelUsage).sort(([, a], [, b]) => (b.inputTokens ?? 0) + (b.outputTokens ?? 0) - ((a.inputTokens ?? 0) + (a.outputTokens ?? 0)));
   const favoriteModel = modelEntries[0];
-  const totalTokens = modelEntries.reduce((sum, [, usage]) => sum + usage.inputTokens + usage.outputTokens, 0);
+  const totalTokens = modelEntries.reduce((sum, [, usage]) => sum + (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0), 0);
 
   // Memoize the factoid so it doesn't change when switching tabs
   const factoid = useMemo(() => generateFunFactoid(stats, totalTokens), [stats, totalTokens]);

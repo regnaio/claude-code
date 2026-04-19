@@ -244,6 +244,20 @@ export function peek(
 export function dequeueAllMatching(
   predicate: (cmd: QueuedCommand) => boolean,
 ): QueuedCommand[] {
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Built the partition into a single splice rather than the previous
+  	clear-then-push pair. The original code did `commandQueue.length = 0`
+  	then `commandQueue.push(...remaining)`; if anything threw between
+  	those two statements (e.g., a subscriber callback in
+  	notifySubscribers' synchronous predecessor, or the predicate itself
+  	when a future caller passes an effectful predicate), the queue ended
+  	up empty and remaining items were lost. `splice(0, queue.length, ...remaining)`
+  	is a single atomic mutation — either it happens or it doesn't, no
+  	partial-clear window where a concurrent reader sees an empty queue
+  	despite the matching items being a strict subset.
+  */
   const matched: QueuedCommand[] = []
   const remaining: QueuedCommand[] = []
   for (const cmd of commandQueue) {
@@ -256,8 +270,7 @@ export function dequeueAllMatching(
   if (matched.length === 0) {
     return []
   }
-  commandQueue.length = 0
-  commandQueue.push(...remaining)
+  commandQueue.splice(0, commandQueue.length, ...remaining)
   notifySubscribers()
   for (const _cmd of matched) {
     logOperation('dequeue')

@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, resolve, sep } from 'path';
 import React from 'react';
 import { ExportDialog } from '../../components/ExportDialog.js';
 import type { ToolUseContext } from '../../Tool.js';
@@ -58,7 +58,25 @@ export async function call(onDone: LocalJSXCommandOnDone, context: ToolUseContex
   const filename = args.trim();
   if (filename) {
     const finalFilename = filename.endsWith('.txt') ? filename : filename.replace(/\.[^.]+$/, '') + '.txt';
-    const filepath = join(getCwd(), finalFilename);
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Reject path-traversal in /export filenames. The previous code did
+    	`join(getCwd(), finalFilename)` which happily resolves
+    	`../../etc/passwd` to a path outside the working directory. The
+    	endsWith('.txt') / extension-rewrite step doesn't sanitize at all —
+    	it just appends .txt, so `../../foo` becomes `../../foo.txt` and
+    	gets written outside cwd. We now resolve and assert the result
+    	stays under getCwd() before writing; otherwise return a clear
+    	error to onDone instead of writing to a surprising location.
+    */
+    const cwd = getCwd();
+    const filepath = resolve(cwd, finalFilename);
+    const cwdWithSep = cwd.endsWith(sep) ? cwd : cwd + sep;
+    if (filepath !== cwd && !filepath.startsWith(cwdWithSep)) {
+      onDone(`Refusing to write outside the working directory: ${finalFilename}`);
+      return null;
+    }
     try {
       writeFileSync_DEPRECATED(filepath, content, {
         encoding: 'utf-8',

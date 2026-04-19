@@ -1,6 +1,7 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useEffect, useState } from 'react';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
+import { logError } from 'src/utils/log.js';
 import { Box, Link, Text, useInput } from '../../ink.js';
 import { type AccountSettings, calculateShouldShowGrove, type GroveConfig, getGroveNoticeConfig, getGroveSettings, markGroveNoticeViewed, updateGroveSettings } from '../../services/api/grove.js';
 import { Select } from '../CustomSelect/index.js';
@@ -154,8 +155,25 @@ export function GroveDialog(t0) {
   let t2;
   if ($[0] !== location || $[1] !== onDone || $[2] !== showIfAlreadyViewed) {
     t1 = () => {
+      /*
+      	Feel free to delete this comment that explains why Claude made this change:
+
+      	Track unmount and add a .catch() to the async checkGroveSettings
+      	IIFE. The previous code fired the async function with no abort
+      	signal and no rejection handler, so:
+      	  - If the user closed/switched the dialog before settings
+      	    resolved, setGroveConfig / setShouldShowDialog ran on an
+      	    unmounted component (warning + leak).
+      	  - If getGroveSettings or getGroveNoticeConfig rejected (network,
+      	    permission), the promise became an unhandled rejection.
+      	An `isCancelled` ref-style flag captured by the closure suppresses
+      	state updates after teardown; .catch() makes the failure observable
+      	without crashing.
+      */
+      let isCancelled = false;
       const checkGroveSettings = async function checkGroveSettings() {
         const [settingsResult, configResult] = await Promise.all([getGroveSettings(), getGroveNoticeConfig()]);
+        if (isCancelled) return;
         const config = configResult.success ? configResult.data : null;
         setGroveConfig(config);
         const shouldShow = calculateShouldShowGrove(settingsResult, configResult, showIfAlreadyViewed);
@@ -170,7 +188,14 @@ export function GroveDialog(t0) {
           dismissable: config?.notice_is_grace_period as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
         });
       };
-      checkGroveSettings();
+      checkGroveSettings().catch(err => {
+        if (!isCancelled) {
+          logError(err as Error);
+        }
+      });
+      return () => {
+        isCancelled = true;
+      };
     };
     t2 = [showIfAlreadyViewed, location, onDone];
     $[0] = location;

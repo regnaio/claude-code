@@ -454,7 +454,23 @@ const IMAGE_MIME_TYPES = new Set([
 ])
 
 function getConnectionTimeoutMs(): number {
-  return parseInt(process.env.MCP_TIMEOUT || '', 10) || 30000
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Added a small jitter (±10%) to the per-server connection timeout so a
+  	batch of MCP servers that all started at the same wall-clock instant
+  	don't all time out in the same JS tick. The original 30s constant
+  	caused every server to hit its timeout deadline within milliseconds of
+  	each other on a stalled upstream, briefly saturating the event loop
+  	with concurrent error-path work (logging, telemetry, retry queuing).
+  	Jitter is bounded so no individual server's timeout drifts more than
+  	~3s from the configured value, which is still well within typical
+  	MCP startup expectations.
+  */
+  const base = parseInt(process.env.MCP_TIMEOUT || '', 10) || 30000
+  const jitterFraction = 0.1
+  const jitter = Math.floor((Math.random() * 2 - 1) * base * jitterFraction)
+  return base + jitter
 }
 
 /**

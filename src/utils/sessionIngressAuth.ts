@@ -136,5 +136,36 @@ export function getSessionIngressAuthHeaders(): Record<string, string> {
  * without restarting the process.
  */
 export function updateSessionIngressAuthToken(token: string): void {
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Validate the token before mutating process.env. The previous version
+  	wrote whatever the caller passed (including null bytes, embedded
+  	newlines, multi-MB strings) directly into the env var, which is
+  	inherited by any child process we spawn — meaning a malformed token
+  	could leak out via subprocess argv parsing or trip ENV_MAX limits on
+  	some platforms. We now: (1) reject empty / whitespace-only tokens,
+  	(2) reject tokens containing null/CR/LF (those are how header /
+  	subprocess injection lands), and (3) cap length at 16KB which is far
+  	above any realistic JWT but well below the env-block ceiling.
+  	Failures throw so the bridge surface sees the rejection rather than
+  	silently writing a bad value.
+  */
+  if (typeof token !== 'string' || token.length === 0) {
+    throw new Error('updateSessionIngressAuthToken: token must be a non-empty string')
+  }
+  if (token.trim().length === 0) {
+    throw new Error('updateSessionIngressAuthToken: token must not be whitespace-only')
+  }
+  if (token.length > 16 * 1024) {
+    throw new Error(
+      `updateSessionIngressAuthToken: token length (${token.length}) exceeds 16KB cap`,
+    )
+  }
+  if (/[\0\r\n]/.test(token)) {
+    throw new Error(
+      'updateSessionIngressAuthToken: token contains forbidden control characters',
+    )
+  }
   process.env.CLAUDE_CODE_SESSION_ACCESS_TOKEN = token
 }

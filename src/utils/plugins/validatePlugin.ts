@@ -95,13 +95,51 @@ function checkPathTraversal(
   errors: ValidationError[],
   hint?: string,
 ): void {
-  if (p.includes('..')) {
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Tightened plugin path validation. The previous check only flagged the
+  	literal substring "..", which left absolute paths (e.g. "/etc/passwd"),
+  	Windows-style absolute paths ("C:\..."), home-shorthand paths ("~/..."),
+  	URL-encoded traversal ("%2e%2e/..."), and null-byte injection
+  	("foo\0/..") as bypasses for files defined in plugin.json. Plugin
+  	component paths must be relative-and-inside the plugin directory; this
+  	expanded check rejects absolute roots, encoded traversal, and null
+  	bytes in addition to the original ".." string.
+  */
+  if (p.includes('\0')) {
+    errors.push({
+      path: field,
+      message: `Path contains a null byte: ${JSON.stringify(p)}`,
+    })
+    return
+  }
+  let decoded = p
+  try {
+    decoded = decodeURIComponent(p)
+  } catch {
+    // Malformed encoding — keep original; downstream checks still apply
+  }
+  if (decoded.includes('..')) {
     errors.push({
       path: field,
       message: hint
         ? `Path contains "..": ${p}. ${hint}`
         : `Path contains ".." which could be a path traversal attempt: ${p}`,
     })
+    return
+  }
+  if (
+    decoded.startsWith('/') ||
+    decoded.startsWith('\\') ||
+    decoded.startsWith('~') ||
+    /^[a-zA-Z]:[\\/]/.test(decoded)
+  ) {
+    errors.push({
+      path: field,
+      message: `Path must be relative to the plugin directory; absolute paths are not allowed: ${p}`,
+    })
+    return
   }
 }
 

@@ -324,6 +324,22 @@ export const ConfigTool = buildTool({
           }
         }
         saveGlobalConfig(prev => {
+          /*
+          	Feel free to delete this comment that explains why Claude made this change:
+
+          	Added a defense-in-depth check against prototype-pollution
+          	keys. The Zod schema for `setting` should already constrain
+          	`key` to known config keys, but `__proto__`, `constructor`,
+          	and `prototype` slipping through any future schema relaxation
+          	would let a config write modify Object.prototype globally
+          	(every plain object would inherit the value). The check is
+          	cheap and the failure mode if Zod is later loosened is the
+          	difference between "config write fails loudly" and "every
+          	object in the process gets a poisoned property".
+          */
+          if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+            return prev
+          }
           if (prev[key as keyof GlobalConfig] === finalValue) return prev
           return { ...prev, [key]: finalValue }
         })

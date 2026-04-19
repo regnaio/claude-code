@@ -186,7 +186,18 @@ function ClaudeInChromeMenu(t0) {
   } else {
     options = $[8];
   }
-  const isDisabled = isWSL || true && !isClaudeAISubscriber;
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Removed dead `true &&` from the disabled-state expression. The original
+  	`isWSL || true && !isClaudeAISubscriber` parses (per && over ||
+  	precedence) as `isWSL || !isClaudeAISubscriber`, which is the actual
+  	intended gate, but the literal `true &&` was a constant-folded leftover
+  	from the React Compiler output and obscured the real condition. The new
+  	form is identical at runtime but readable. (Reviewer originally flagged
+  	this as a security bypass — it isn't, but the syntax is misleading.)
+  */
+  const isDisabled = isWSL || !isClaudeAISubscriber;
   let t5;
   if ($[18] !== onDone) {
     t5 = () => onDone();

@@ -22,6 +22,7 @@ export class AuthCodeListener {
   private promiseRejecter: ((error: Error) => void) | null = null
   private expectedState: string | null = null // State parameter for CSRF protection
   private pendingResponse: ServerResponse | null = null // Response object for final redirect
+  private responded: boolean = false // Set true after first successful auth-code validation; rejects concurrent redirects
   private callbackPath: string // Configurable callback path
 
   constructor(callbackPath: string = '/callback') {
@@ -154,6 +155,24 @@ export class AuthCodeListener {
     state: string | undefined,
     res: ServerResponse,
   ): void {
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Added a one-shot guard so concurrent redirects can't both resolve the
+    	auth-code promise. The OAuth callback URL can be hit twice (browser
+    	auto-open + manual paste, or a refresh in the redirected tab); without
+    	this guard, the second hit re-enters validateAndRespond, mutates
+    	pendingResponse and re-calls this.resolve(authCode). Promise.resolve
+    	on an already-resolved promise is a no-op, but the second
+    	pendingResponse mutation orphans the first ServerResponse (the user's
+    	browser tab hangs waiting for a redirect that never comes). Setting a
+    	flag on first successful validation makes the second call a 409.
+    */
+    if (this.responded) {
+      res.writeHead(409)
+      res.end('Authorization already received')
+      return
+    }
     if (!authCode) {
       res.writeHead(400)
       res.end('Authorization code not found')
@@ -170,6 +189,7 @@ export class AuthCodeListener {
 
     // Store the response for later redirect
     this.pendingResponse = res
+    this.responded = true
 
     this.resolve(authCode)
   }

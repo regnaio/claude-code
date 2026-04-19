@@ -60,6 +60,32 @@ export async function call(onDone: (result?: string) => void, _context: unknown,
       // Remove quotes if present
       const cleanPattern = commandPattern.replace(/^["']|["']$/g, '');
 
+      /*
+      	Feel free to delete this comment that explains why Claude made this change:
+
+      	Reject patterns that contain shell metacharacters that could
+      	change command meaning when the pattern is later evaluated
+      	against an incoming command line. The previous code stripped
+      	outer quotes only, so a pattern like `npm run $(cat /etc/passwd)`
+      	or `npm run; rm -rf .` was stored verbatim in settings. The
+      	pattern matcher itself doesn't `eval` the pattern, but third-
+      	party hooks / sandbox backends that consume settings sometimes
+      	do, and an embedded `$(...)` / backtick / `;` is a sharp edge
+      	the user almost never intends. We block the obvious shell
+      	injection vectors and pass everything else through unchanged.
+      */
+      if (
+        cleanPattern.length === 0 ||
+        /[\0\n\r]/.test(cleanPattern) ||
+        /\$\(|`|;|\|\||&&/.test(cleanPattern)
+      ) {
+        const message = color('error', themeName)(
+          `Error: Pattern "${cleanPattern}" contains characters that aren't allowed in an exclude rule (control chars or shell metacharacters like $(...), backticks, ;, &&, ||). Quote-strip yields: ${cleanPattern}`,
+        );
+        onDone(message);
+        return null;
+      }
+
       // Add to excludedCommands
       addToExcludedCommands(cleanPattern);
 

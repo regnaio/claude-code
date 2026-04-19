@@ -165,7 +165,53 @@ export function validateURL(url: string): boolean {
     return false
   }
 
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Added defense against SSRF to internal IP ranges. The previous check
+  	only rejected single-label hostnames like "localhost" or "intranet",
+  	but a literal IP — 127.0.0.1, 10.x.x.x, 192.168.x.x, 172.16-31.x.x,
+  	169.254.169.254 (cloud metadata), 100.64.x.x (CGNAT), or any IPv6
+  	loopback/link-local — would pass `parts.length >= 2` and reach the
+  	allowlist server. The domain-info API may approve a public-looking
+  	hostname that resolves to a private IP, but blocking literal-IP
+  	private ranges at the URL-parsing stage closes the most direct vector.
+  */
+  if (isPrivateOrLocalAddress(hostname)) {
+    return false
+  }
+
   return true
+}
+
+function isPrivateOrLocalAddress(hostname: string): boolean {
+  const lower = hostname.toLowerCase()
+
+  // IPv6 forms (parsed.hostname strips brackets)
+  if (lower === '::' || lower === '::1') return true
+  if (lower.startsWith('fe80:') || lower.startsWith('fe80::')) return true // link-local
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true // unique local fc00::/7
+  if (lower.startsWith('::ffff:')) {
+    // IPv4-mapped IPv6 — recurse on the embedded v4
+    return isPrivateOrLocalAddress(lower.slice('::ffff:'.length))
+  }
+
+  // IPv4 dotted quad
+  const v4Match = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (v4Match) {
+    const [a, b] = [parseInt(v4Match[1]!, 10), parseInt(v4Match[2]!, 10)]
+    if (a === 10) return true // 10.0.0.0/8
+    if (a === 127) return true // loopback
+    if (a === 0) return true // 0.0.0.0/8
+    if (a === 169 && b === 254) return true // link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12
+    if (a === 192 && b === 168) return true // 192.168.0.0/16
+    if (a === 100 && b >= 64 && b <= 127) return true // CGNAT 100.64.0.0/10
+    if (a >= 224) return true // multicast / reserved
+    return false
+  }
+
+  return false
 }
 
 type DomainCheckResult =

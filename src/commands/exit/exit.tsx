@@ -17,9 +17,28 @@ export async function call(onDone: LocalJSXCommandOnDone): Promise<React.ReactNo
   // ctrl+c, ctrl+d — all funnel through here via REPL's handleExit.
   if (feature('BG_SESSIONS') && isBgSession()) {
     onDone();
-    spawnSync('tmux', ['detach-client'], {
-      stdio: 'ignore'
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Surface tmux detach failures instead of silently returning.
+    	Previously `spawnSync('tmux', ['detach-client'], { stdio: 'ignore' })`
+    	dropped both exit code and stderr, then immediately returned null —
+    	so a misconfigured tmux (binary missing, not in a session despite
+    	the bg check, locked socket) left the user thinking they detached
+    	when they didn't. We now capture stderr and write a one-line
+    	message to the user's stderr if the spawn itself failed or tmux
+    	exited non-zero. Detach is best-effort either way (we can't reverse
+    	the onDone()), but the user at least knows something went wrong.
+    */
+    const result = spawnSync('tmux', ['detach-client'], {
+      stdio: ['ignore', 'ignore', 'pipe'],
     });
+    if (result.error || (result.status !== null && result.status !== 0)) {
+      const detail = result.error?.message
+        ?? (result.stderr ? result.stderr.toString().trim() : '')
+        ?? `tmux exited ${result.status}`;
+      process.stderr.write(`tmux detach-client failed: ${detail}\n`);
+    }
     return null;
   }
   const showWorktree = getCurrentWorktreeSession() !== null;

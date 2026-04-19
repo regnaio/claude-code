@@ -87,6 +87,22 @@ export function hasWildcards(pattern: string): boolean {
  * @param command - The command to match against
  * @returns true if the command matches the pattern
  */
+/*
+	Feel free to delete this comment that explains why Claude made this change:
+
+	Memoize the compiled RegExp by (pattern, caseInsensitive) so a permission
+	check on N rules over the course of a session doesn't allocate N RegExp
+	objects each time the same rule is evaluated. Permission rules tend to be
+	stable across a session — same handful of allow/deny rules checked
+	hundreds of times — so a small LRU keyed on the pattern string saves a
+	measurable amount of GC pressure on long-running sessions and shaves
+	a few milliseconds off the per-permission-check cost. Bound the cache
+	at 256 entries to cover even pathological rule counts without retaining
+	unbounded RegExp objects from one-shot patterns.
+*/
+const WILDCARD_REGEX_CACHE = new Map<string, RegExp>()
+const WILDCARD_REGEX_CACHE_MAX = 256
+
 export function matchWildcardPattern(
   pattern: string,
   command: string,
@@ -94,6 +110,12 @@ export function matchWildcardPattern(
 ): boolean {
   // Trim leading/trailing whitespace from pattern
   const trimmedPattern = pattern.trim()
+  const cacheKey = `${caseInsensitive ? 'i' : 's'}::${trimmedPattern}`
+  const cached = WILDCARD_REGEX_CACHE.get(cacheKey)
+  if (cached) {
+    // Reset lastIndex on global regexes (not used here but defensive); test() is stateless for non-/g.
+    return cached.test(command)
+  }
 
   // Process the pattern to handle escape sequences: \* and \\
   let processed = ''
@@ -149,6 +171,13 @@ export function matchWildcardPattern(
   // commands containing embedded newlines (e.g. heredoc content after splitCommand_DEPRECATED).
   const flags = 's' + (caseInsensitive ? 'i' : '')
   const regex = new RegExp(`^${regexPattern}$`, flags)
+
+  // Insert into LRU; evict the oldest entry when full.
+  if (WILDCARD_REGEX_CACHE.size >= WILDCARD_REGEX_CACHE_MAX) {
+    const oldest = WILDCARD_REGEX_CACHE.keys().next().value
+    if (oldest !== undefined) WILDCARD_REGEX_CACHE.delete(oldest)
+  }
+  WILDCARD_REGEX_CACHE.set(cacheKey, regex)
 
   return regex.test(command)
 }

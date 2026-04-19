@@ -35,8 +35,24 @@ class FileReadCache {
     const cacheKey = filePath
     const cachedData = this.cache.get(cacheKey)
 
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Normalize mtime via Math.floor so the cache key matches what the rest
+    	of the codebase uses (file.ts:68 and file.ts:81 both Math.floor(mtimeMs)
+    	when computing the read-timestamp). Without this, the cache stored the
+    	raw float mtimeMs (e.g. 1700000000.123) but every call to compute the
+    	"current" mtime via the sibling helpers floored it (1700000000), so the
+    	exact-equality compare on line 39 missed every entry written by a
+    	caller that went through file.ts's read path. Result: cache hit-rate
+    	collapsed on filesystems with sub-millisecond timestamps (most modern
+    	ones) and the cache effectively no-op'd. Floor here too so equality
+    	holds across paths.
+    */
+    const normalizedMtime = Math.floor(stats.mtimeMs)
+
     // Check if we have valid cached data
-    if (cachedData && cachedData.mtime === stats.mtimeMs) {
+    if (cachedData && cachedData.mtime === normalizedMtime) {
       return {
         content: cachedData.content,
         encoding: cachedData.encoding,
@@ -53,7 +69,7 @@ class FileReadCache {
     this.cache.set(cacheKey, {
       content,
       encoding,
-      mtime: stats.mtimeMs,
+      mtime: normalizedMtime,
     })
 
     // Evict oldest entries if cache is too large

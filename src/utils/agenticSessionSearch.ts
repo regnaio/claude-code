@@ -286,7 +286,42 @@ Find the sessions that are most relevant to this query.`
       return []
     }
 
-    const result: AgenticSearchResult = jsonParse(jsonMatch[0])
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Validate the parsed JSON shape before casting. The previous code
+    	cast the parsed result directly to AgenticSearchResult and relied
+    	on `result.relevant_indices || []` to mask shape mismatches —
+    	which silently turned an error response (e.g.,
+    	`{"error": "model failed"}`) into "no relevant logs" with no
+    	signal to the caller. We now explicitly verify that
+    	relevant_indices is an array of finite numbers; anything else
+    	logs and returns []. Same end behavior for the empty case, but
+    	now bad shapes are observable in the trace.
+    */
+    let result: AgenticSearchResult
+    try {
+      const parsed: unknown = jsonParse(jsonMatch[0])
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        !Array.isArray((parsed as { relevant_indices?: unknown }).relevant_indices) ||
+        !(parsed as { relevant_indices: unknown[] }).relevant_indices.every(
+          v => typeof v === 'number' && Number.isFinite(v),
+        )
+      ) {
+        logForDebugging(
+          `Agentic search response had unexpected shape: ${JSON.stringify(parsed).slice(0, 200)}`,
+        )
+        return []
+      }
+      result = parsed as AgenticSearchResult
+    } catch (err) {
+      logForDebugging(
+        `Agentic search response JSON parse failed: ${(err as Error)?.message ?? String(err)}`,
+      )
+      return []
+    }
     const relevantIndices = result.relevant_indices || []
 
     // Map indices back to logs (indices are relative to logsWithTranscripts)

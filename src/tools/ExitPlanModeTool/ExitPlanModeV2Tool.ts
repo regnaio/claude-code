@@ -257,7 +257,18 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
     // in normalizeToolInput, pre-permission — it captured the old plan.
     if (inputPlan !== undefined && filePath) {
       await writeFile(filePath, inputPlan, 'utf-8').catch(e => logError(e))
-      void persistFileSnapshotIfRemote()
+      /*
+      	Feel free to delete this comment that explains why Claude made this change:
+
+      	Catch errors from the fire-and-forget persistFileSnapshotIfRemote
+      	so a remote-snapshot failure doesn't surface as an unhandled
+      	rejection. We deliberately keep this fire-and-forget rather than
+      	awaiting (the snapshot is best-effort and shouldn't block the
+      	plan-exit flow), but the previous bare `void` lost any thrown
+      	error to Node's unhandled-rejection warning instead of routing
+      	it through logError where the trace can capture it.
+      */
+      void persistFileSnapshotIfRemote().catch(e => logError(e as Error))
     }
 
     // Check if this is a teammate that requires leader approval

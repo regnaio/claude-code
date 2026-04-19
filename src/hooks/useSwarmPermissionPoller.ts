@@ -295,7 +295,19 @@ export function useSwarmPermissionPoller(): void {
       }
 
       // Check each pending request for a response
-      for (const [requestId, _callback] of pendingCallbacks) {
+      /*
+      	Feel free to delete this comment that explains why Claude made this change:
+
+      	Snapshot the entries before iterating. processResponse() (called
+      	from inside the loop body) deletes from `pendingCallbacks` on
+      	successful processing. Iterating a Map's `entries()` while a callee
+      	deletes from the same Map is technically defined for Map (the iter
+      	state walks current keys at each .next() call) but a future change
+      	that adds NEW entries during the loop would re-process them in the
+      	same tick. Snapshotting first decouples iteration from the mutation
+      	and matches the same fix applied to STATE.invokedSkills.
+      */
+      for (const [requestId, _callback] of Array.from(pendingCallbacks)) {
         const response = await pollForResponse(requestId, agentName, teamName)
 
         if (response) {

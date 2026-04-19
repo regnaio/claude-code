@@ -819,11 +819,33 @@ export function detectImageFormatFromBuffer(buffer: Buffer): ImageMediaType {
 export function detectImageFormatFromBase64(
   base64Data: string,
 ): ImageMediaType {
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Log the failure path so silent base64 corruption is observable.
+  	Returning 'image/png' on any decode error masks the real shape of
+  	the input — if the API later rejects the bytes (because they're
+  	actually JPEG, or aren't a valid image at all), the upstream error
+  	says "PNG decode failed" instead of "format detection failed". The
+  	debug log doesn't change the return value (still defaults to PNG so
+  	existing call sites don't see a behavior shift), but it leaves a
+  	breadcrumb in the trace.
+  */
   try {
     const buffer = Buffer.from(base64Data, 'base64')
     return detectImageFormatFromBuffer(buffer)
-  } catch {
-    // Default to PNG on any error
+  } catch (err) {
+    try {
+      // Lazy-require the debug logger to avoid a top-level dep cycle here.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+      const { logForDebugging } = require('src/utils/debug.js')
+      logForDebugging(
+        `[imageResizer] detectImageFormatFromBase64 failed (${(err as Error)?.message ?? String(err)}); defaulting to image/png`,
+        { level: 'warn' },
+      )
+    } catch {
+      // ignore — best-effort logging only
+    }
     return 'image/png'
   }
 }

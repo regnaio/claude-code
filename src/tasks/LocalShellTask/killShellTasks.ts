@@ -27,9 +27,26 @@ export function killTask(taskId: string, setAppState: SetAppStateFn): void {
       logError(error)
     }
 
-    task.unregisterCleanup?.()
-    if (task.cleanupTimeoutId) {
-      clearTimeout(task.cleanupTimeoutId)
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Made cleanup ordering exception-safe. Previously,
+    	`task.unregisterCleanup?.()` ran first; if it threw (e.g., the
+    	registry already torn down or the unregister fn closure referenced a
+    	stale handle), `clearTimeout(task.cleanupTimeoutId)` was skipped. The
+    	timeout would later fire on a task that's been mutated to "killed",
+    	whose state expects no further callbacks — leading to a stale-state
+    	cleanup callback running. Wrapped both in try/finally so the timeout
+    	is always cleared even if unregisterCleanup throws.
+    */
+    try {
+      task.unregisterCleanup?.()
+    } catch (error) {
+      logError(error)
+    } finally {
+      if (task.cleanupTimeoutId) {
+        clearTimeout(task.cleanupTimeoutId)
+      }
     }
 
     return {

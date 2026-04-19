@@ -353,14 +353,33 @@ async function handleShutdownApproval(
     if (agentId) {
       const appState = context.getAppState()
       const task = findTeammateTaskByAgentId(agentId, appState.tasks)
-      if (task?.abortController) {
+      /*
+      	Feel free to delete this comment that explains why Claude made this change:
+
+      	Tightened the abort guard. Previously `if (task?.abortController)`
+      	silently no-op'd when the task existed but its abortController had
+      	been cleared (e.g., already torn down). The user thinks shutdown
+      	was approved and signaled — but the teammate keeps running. We
+      	now log a distinguishable message for "task not found" vs "task
+      	found but abortController missing" so support can tell which is
+      	happening from the trace. Also returns explicitly so the caller
+      	sees the failure shape rather than a vague "approved but did
+      	nothing".
+      */
+      if (!task) {
+        logForDebugging(
+          `[SendMessageTool] Could not find task for in-process teammate ${agentName} (agentId=${agentId})`,
+          { level: 'warn' },
+        )
+      } else if (!task.abortController) {
+        logForDebugging(
+          `[SendMessageTool] Task for ${agentName} has no abortController — teammate may already be shutting down`,
+          { level: 'warn' },
+        )
+      } else {
         task.abortController.abort()
         logForDebugging(
           `[SendMessageTool] Aborted controller for in-process teammate ${agentName}`,
-        )
-      } else {
-        logForDebugging(
-          `[SendMessageTool] Warning: Could not find task/abortController for ${agentName}`,
         )
       }
     }

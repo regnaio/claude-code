@@ -2362,7 +2362,20 @@ export function REPL({
     // When permission context changes, recheck all queued items
     // This handles the case where approving item1 with "don't ask again"
     // should auto-approve other queued items that now match the updated rules
-    setImmediate(setToolUseConfirmQueue => {
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Fixed an unintentional `setImmediate(callback, arg)` anti-pattern.
+    	`setImmediate` does forward extra args to the callback, but the
+    	callback's parameter was named `setToolUseConfirmQueue`, shadowing the
+    	outer setter. The shadow plus the extra arg made the code look like a
+    	deliberate "pass setter as arg", but at runtime the parameter received
+    	the same setter reference (or, depending on engine semantics, undefined
+    	in strict mode in non-Node runtimes), and the inner closure-captured
+    	setter was used anyway — making the explicit pass meaningless. Cleaned
+    	up to a plain setImmediate call that uses the closure setter directly.
+    */
+    setImmediate(() => {
       // Use setToolUseConfirmQueue callback to get current queue state
       // instead of capturing it in the closure, to avoid stale closure issues
       setToolUseConfirmQueue(currentQueue => {
@@ -2371,7 +2384,7 @@ export function REPL({
         });
         return currentQueue;
       });
-    }, setToolUseConfirmQueue);
+    });
   }, [setAppState, setToolUseConfirmQueue]);
 
   // Register the leader's setToolPermissionContext for in-process teammates

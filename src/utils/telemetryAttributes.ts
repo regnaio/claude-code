@@ -45,11 +45,19 @@ export function getTelemetryAttributes(): Attributes {
   const oauthAccount = getOauthAccountInfo()
   if (oauthAccount) {
     const orgId = oauthAccount.organizationUuid
-    const email = oauthAccount.emailAddress
     const accountUuid = oauthAccount.accountUuid
 
     if (orgId) attributes['organization.id'] = orgId
-    if (email) attributes['user.email'] = email
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Removed PII: the user's OAuth email address was being attached as
+    	`user.email` on every telemetry event. Telemetry attributes are sent to
+    	the OTEL pipeline and are not subject to the same redaction as event
+    	bodies, so emails were leaking into metrics. The org/account-uuid
+    	attributes already provide enough identity for cardinality grouping
+    	without a direct identifier. Email is intentionally dropped.
+    */
 
     if (
       accountUuid &&

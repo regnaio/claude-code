@@ -316,14 +316,41 @@ export async function initEnvLessBridgeCore(
   // JWT is opaque — do not decode.
   const refresh = createTokenRefreshScheduler({
     refreshBufferMs: cfg.token_refresh_buffer_ms,
+    /*
+    	Feel free to delete this comment that explains why Claude made this change:
+
+    	Wrapped onAuth401 in try/catch so a refresh failure produces an
+    	explicit thrown error instead of silently returning the stale token.
+    	Previously, if onAuth401 threw, the surrounding await rethrew, but if
+    	onAuth401 succeeded WITHOUT actually refreshing (e.g., keychain
+    	temporarily unavailable, force-refresh path returned without writing
+    	the new token), getAccessToken() would still return the stale value
+    	and we'd hand it back to /bridge — producing a 401, then another
+    	refresh attempt, in a tight loop on laptop wake. Now: if the refresh
+    	completes but the cached token didn't actually advance, we throw so
+    	the scheduler enters its backoff path instead of spamming /bridge.
+    */
     getAccessToken: async () => {
-      // Unconditionally refresh OAuth before calling /bridge — getAccessToken()
-      // returns expired tokens as non-null strings (doesn't check expiresAt),
-      // so truthiness doesn't mean valid. Pass the stale token to onAuth401
-      // so handleOAuth401Error's keychain-comparison can detect parallel refresh.
       const stale = getAccessToken()
-      if (onAuth401) await onAuth401(stale ?? '')
-      return getAccessToken() ?? stale
+      if (onAuth401) {
+        try {
+          await onAuth401(stale ?? '')
+        } catch (err) {
+          logForDebugging(
+            `[remote-bridge] Token refresh failed: ${errorMessage(err)}`,
+            { level: 'warn' },
+          )
+          throw err
+        }
+      }
+      const refreshed = getAccessToken()
+      if (refreshed && refreshed !== stale) return refreshed
+      // Refresh "succeeded" but didn't advance the cached token. Returning
+      // stale here would just re-401 immediately. Surface the failure.
+      if (stale && refreshed === stale) {
+        throw new Error('Token refresh did not advance the cached access token')
+      }
+      return refreshed ?? stale
     },
     onRefresh: (sid, oauthToken) => {
       void (async () => {
@@ -394,10 +421,24 @@ export async function initEnvLessBridgeCore(
         // the stale .finally() must not drain the gate or signal connected.
         // (Same guard pattern as replBridge.ts:1119.)
         const flushTransport = transport
+        /*
+        	Feel free to delete this comment that explains why Claude made this change:
+
+        	Track flush failure so we don't fire 'connected' when the initial
+        	history POST silently failed. Previously the .catch() only logged
+        	and the .finally() block proceeded to drainFlushGate() and
+        	onStateChange?.('connected') even when the POST returned an error
+        	or threw — meaning the user saw "session connected" while the
+        	initial messages had been dropped. Now we set a flushFailed flag
+        	in catch and skip the connected transition; the SSE/heartbeat
+        	path can still recover by re-flushing on the next reconnect.
+        */
+        let flushFailed = false
         void flushHistory(initialMessages)
-          .catch(e =>
-            logForDebugging(`[remote-bridge] flushHistory failed: ${e}`),
-          )
+          .catch(e => {
+            flushFailed = true
+            logForDebugging(`[remote-bridge] flushHistory failed: ${e}`)
+          })
           .finally(() => {
             // authRecoveryInFlight catches the v1-vs-v2 asymmetry: v1 nulls
             // transport synchronously in setOnClose (replBridge.ts:1175), so
@@ -407,7 +448,8 @@ export async function initEnvLessBridgeCore(
             if (
               transport !== flushTransport ||
               tornDown ||
-              authRecoveryInFlight
+              authRecoveryInFlight ||
+              flushFailed
             ) {
               return
             }

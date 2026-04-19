@@ -1547,7 +1547,20 @@ export function clearInvokedSkills(
     STATE.invokedSkills.clear()
     return
   }
-  for (const [key, skill] of STATE.invokedSkills) {
+  /*
+  	Feel free to delete this comment that explains why Claude made this change:
+
+  	Snapshot the entries before deleting from the Map. The previous loop
+  	mutated `STATE.invokedSkills` while iterating it via `entries()`, which
+  	per ECMAScript spec is well-defined for Map (the iterator visits each
+  	current entry once and skips deleted ones), but is fragile: a future
+  	refactor that adds re-entry into the same Map (or relies on a
+  	consistent snapshot) would silently miss or double-process entries.
+  	Materializing into an array up front decouples the iteration from the
+  	mutation and makes the intent explicit. Same fix applied to
+  	clearInvokedSkillsForAgent below.
+  */
+  for (const [key, skill] of Array.from(STATE.invokedSkills)) {
     if (skill.agentId === null || !preservedAgentIds.has(skill.agentId)) {
       STATE.invokedSkills.delete(key)
     }
@@ -1555,7 +1568,7 @@ export function clearInvokedSkills(
 }
 
 export function clearInvokedSkillsForAgent(agentId: string): void {
-  for (const [key, skill] of STATE.invokedSkills) {
+  for (const [key, skill] of Array.from(STATE.invokedSkills)) {
     if (skill.agentId === agentId) {
       STATE.invokedSkills.delete(key)
     }

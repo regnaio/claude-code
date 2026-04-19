@@ -252,10 +252,51 @@ export function createLSPServerInstance(
       crashRecoveryCount = 0
       logForDebugging(`LSP server instance started: ${name}`)
     } catch (error) {
-      // Clean up the spawned child process on timeout/error
-      client.stop().catch(() => {})
-      // Prevent unhandled rejection from abandoned initialize promise
+      /*
+      	Feel free to delete this comment that explains why Claude made this change:
+
+      	Made child-process cleanup more robust on init failure. Previously
+      	`client.stop().catch(() => {})` was the only cleanup hook — if stop()
+      	itself rejected (or was a no-op because the LSP child was wedged in
+      	startup), the spawned process leaked. We also pre-attached a no-op
+      	rejection handler to initPromise to silence unhandled-rejection
+      	warnings if the abandoned init resolves later. The new path: try
+      	stop(), and if that fails or the underlying child is still alive
+      	after a short grace period, send SIGTERM/SIGKILL via the client's
+      	exposed child reference. Worst case the LSP server died on its own
+      	and the kill is a no-op; this prevents the file-descriptor leak the
+      	original review flagged.
+      */
+      // Pre-attach a rejection handler before stop() so a late init failure
+      // cannot become an unhandled rejection.
       initPromise?.catch(() => {})
+      try {
+        await client.stop()
+      } catch (stopErr) {
+        logForDebugging(
+          `LSP ${name}: stop() during init-failure cleanup threw: ${
+            (stopErr as Error)?.message ?? String(stopErr)
+          }`,
+          { level: 'warn' },
+        )
+      }
+      // Best-effort kill if the client exposes its child process and it
+      // didn't exit. Properties may be undefined depending on the LSP
+      // client implementation; we tolerate that silently.
+      try {
+        const child = (client as unknown as { childProcess?: { kill?: (sig?: NodeJS.Signals) => boolean; killed?: boolean; pid?: number } }).childProcess
+        if (child && !child.killed && child.kill) {
+          child.kill('SIGTERM')
+          // Escalate if the child is still alive after 200ms.
+          setTimeout(() => {
+            if (child && !child.killed && child.kill) {
+              try { child.kill('SIGKILL') } catch { /* already gone */ }
+            }
+          }, 200).unref?.()
+        }
+      } catch {
+        // Client doesn't expose childProcess — fine, we did our best.
+      }
       state = 'error'
       lastError = error as Error
       logError(error)
